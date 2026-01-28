@@ -1,12 +1,12 @@
 {
   "C_Cpp.intelliSenseEngine": "default",
-  "idf.espIdfPathWin": "C:\\Users\\ASUS\\espidf\\v5.5.1\\esp-idf",
-  "idf.pythonInstallPath": "C:\\Users\\ASUS\\espidf\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
+  "idf.espIdfPathWin": "C:\\Users\\Engineer0\\esp-idf\\v5.5.1\\esp-idf",
+  "idf.pythonInstallPath": "C:\\Users\\Engineer0\\esp-idf\\.espressif\\tools\\idf-python\\3.11.2\\python.exe",
   "idf.openOcdConfigs": [
     "board/esp32h2-builtin.cfg"
   ],
-  "idf.portWin": "COM10",
-  "idf.toolsPathWin": "C:\\Users\\ASUS\\espidf\\.espressif",
+  "idf.portWin": "COM5",
+  "idf.toolsPathWin": "C:\\Users\\Engineer0\\esp-idf\\.espressif",
   "idf.customExtraVars": {
     "IDF_TARGET": "esp32h2"
   },

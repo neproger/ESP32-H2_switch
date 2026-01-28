@@ -16,26 +16,31 @@
 #include "zcl_utility.h"
 
 /* Zigbee configuration */
-#define HA_ONOFF_SWITCH_ENDPOINT        1          /* esp light switch device endpoint */
+#define HA_ONOFF_SWITCH_ENDPOINT        1          /* Zigbee On/Off switch (client) endpoint */
+#define HA_ONOFF_RELAY_ENDPOINT         2          /* Zigbee On/Off light (server) endpoint (test relay) */
+#define HA_TEMP_HUMI_SENSOR_ENDPOINT    3          /* Zigbee Temperature + Humidity sensor endpoint */
+
+/* Board GPIOs (adjust for your ESP32-H2 board if needed) */
+#define GPIO_OUTPUT_IO_RELAY_TEST       GPIO_NUM_8 /* Use the blue LED as a "relay" output */
+
 /* Let the device join any 2.4GHz Zigbee channel (11-26). */
 #define ESP_ZB_PRIMARY_CHANNEL_MASK     ESP_ZB_TRANSCEIVER_ALL_CHANNELS_MASK
 
 #define INSTALLCODE_POLICY_ENABLE       false      /* enable the install code policy for security */
-/* End-device keep-alive must be lower than the parent aging timeout. */
-#define ESP_ZB_ED_TIMEOUT               ESP_ZB_ED_AGING_TIMEOUT_64MIN
-#define ESP_ZB_ED_KEEP_ALIVE_MS         3000U
+
+/* Router configuration (mains-powered) */
+#define ESP_ZB_MAX_CHILDREN             10U
 
 /* Basic manufacturer information */
 #define ESP_MANUFACTURER_NAME "\x09""ESPRESSIF"      /* Customized manufacturer name */
 #define ESP_MODEL_IDENTIFIER "\x07"CONFIG_IDF_TARGET /* Customized model identifier */
 
-#define ESP_ZB_ZED_CONFIG()                                                             \
+#define ESP_ZB_ZR_CONFIG()                                                              \
     {                                                                                   \
-        .esp_zb_role = ESP_ZB_DEVICE_TYPE_ED,                                           \
+        .esp_zb_role = ESP_ZB_DEVICE_TYPE_ROUTER,                                       \
         .install_code_policy = INSTALLCODE_POLICY_ENABLE,                               \
-        .nwk_cfg.zed_cfg = {                                                            \
-            .ed_timeout = ESP_ZB_ED_TIMEOUT,                                            \
-            .keep_alive = ESP_ZB_ED_KEEP_ALIVE_MS,                                      \
+        .nwk_cfg.zczr_cfg = {                                                           \
+            .max_children = ESP_ZB_MAX_CHILDREN,                                        \
         },                                                                              \
     }
 

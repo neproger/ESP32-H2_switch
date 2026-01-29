@@ -36,6 +36,7 @@
  */
 
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
@@ -93,6 +94,7 @@ static void switch_driver_button_detected(void *arg)
     switch_func_pair_t button_func_pair;
     static switch_state_t switch_state = SWITCH_IDLE;
     bool evt_flag = false;
+    int64_t press_start_us = 0;
 
     for (;;) {
         /* check if there is any queue received, if yes read out the button_func_pair */
@@ -100,18 +102,28 @@ static void switch_driver_button_detected(void *arg)
             io_num =  button_func_pair.pin;
             switch_driver_gpios_intr_enabled(false);
             evt_flag = true;
+            press_start_us = 0;
         }
         while (evt_flag) {
             bool value = gpio_get_level(io_num);
             switch (switch_state) {
             case SWITCH_IDLE:
                 switch_state = (value == GPIO_INPUT_LEVEL_ON) ? SWITCH_PRESS_DETECTED : SWITCH_IDLE;
+                if (switch_state == SWITCH_PRESS_DETECTED) {
+                    press_start_us = esp_timer_get_time();
+                }
                 break;
             case SWITCH_PRESS_DETECTED:
                 switch_state = (value == GPIO_INPUT_LEVEL_ON) ? SWITCH_PRESS_DETECTED : SWITCH_RELEASE_DETECTED;
                 break;
             case SWITCH_RELEASE_DETECTED:
                 switch_state = SWITCH_IDLE;
+                if (press_start_us > 0) {
+                    const int64_t held_ms = (esp_timer_get_time() - press_start_us) / 1000;
+                    if (held_ms >= SWITCH_DRIVER_LONG_PRESS_MS) {
+                        button_func_pair.func = SWITCH_FACTORY_RESET_CONTROL;
+                    }
+                }
                 /* callback to button_handler */
                 (*func_ptr)(&button_func_pair);
                 break;

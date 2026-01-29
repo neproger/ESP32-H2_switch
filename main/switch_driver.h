@@ -55,6 +55,9 @@ extern "C" {
 
 #define PAIR_SIZE(TYPE_STR_PAIR) (sizeof(TYPE_STR_PAIR) / sizeof(TYPE_STR_PAIR[0]))
 
+/* Treat press duration >= this as a "long press" */
+#define SWITCH_DRIVER_LONG_PRESS_MS (8000)
+
 typedef enum {
     SWITCH_IDLE,
     SWITCH_PRESS_ARMED,
@@ -67,6 +70,7 @@ typedef enum {
     SWITCH_ON_CONTROL,
     SWITCH_OFF_CONTROL,
     SWITCH_ONOFF_TOGGLE_CONTROL,
+    SWITCH_FACTORY_RESET_CONTROL,
     SWITCH_LEVEL_UP_CONTROL,
     SWITCH_LEVEL_DOWN_CONTROL,
     SWITCH_LEVEL_CYCLE_CONTROL,

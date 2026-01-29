@@ -48,6 +48,58 @@ static uint16_t s_fake_humi_max_centi_pct = 10000; /* 100.00% */
 static uint16_t s_fake_humi_tolerance_centi_pct = 50; /* 0.50% */
 static bool s_fake_reporting_started;
 
+/* Retry interval for BDB network steering after failure */
+#define ESP_ZB_STEERING_RETRY_DELAY_MS (3000)
+#define ESP_ZB_STEERING_RETRY_DELAY_S  (ESP_ZB_STEERING_RETRY_DELAY_MS / 1000)
+
+static const char *zb_nwk_cmd_status_to_string(uint8_t status)
+{
+    switch ((esp_zb_nwk_command_status_t)status) {
+    case ESP_ZB_NWK_COMMAND_STATUS_NO_ROUTE_AVAILABLE:
+        return "NO_ROUTE_AVAILABLE";
+    case ESP_ZB_NWK_COMMAND_STATUS_TREE_LINK_FAILURE:
+        return "TREE_LINK_FAILURE";
+    case ESP_ZB_NWK_COMMAND_STATUS_NONE_TREE_LINK_FAILURE:
+        return "NON_TREE_LINK_FAILURE";
+    case ESP_ZB_NWK_COMMAND_STATUS_LOW_BATTERY_LEVEL:
+        return "LOW_BATTERY_LEVEL";
+    case ESP_ZB_NWK_COMMAND_STATUS_NO_ROUTING_CAPACITY:
+        return "NO_ROUTING_CAPACITY";
+    case ESP_ZB_NWK_COMMAND_STATUS_NO_INDIRECT_CAPACITY:
+        return "NO_INDIRECT_CAPACITY";
+    case ESP_ZB_NWK_COMMAND_STATUS_INDIRECT_TRANSACTION_EXPIRY:
+        return "INDIRECT_TRANSACTION_EXPIRY";
+    case ESP_ZB_NWK_COMMAND_STATUS_TARGET_DEVICE_UNAVAILABLE:
+        return "TARGET_DEVICE_UNAVAILABLE";
+    case ESP_ZB_NWK_COMMAND_STATUS_TARGET_ADDRESS_UNALLOCATED:
+        return "TARGET_ADDRESS_UNALLOCATED";
+    case ESP_ZB_NWK_COMMAND_STATUS_PARENT_LINK_FAILURE:
+        return "PARENT_LINK_FAILURE";
+    case ESP_ZB_NWK_COMMAND_STATUS_VALIDATE_ROUTE:
+        return "VALIDATE_ROUTE";
+    case ESP_ZB_NWK_COMMAND_STATUS_SOURCE_ROUTE_FAILURE:
+        return "SOURCE_ROUTE_FAILURE";
+    case ESP_ZB_NWK_COMMAND_STATUS_MANY_TO_ONE_ROUTE_FAILURE:
+        return "MANY_TO_ONE_ROUTE_FAILURE";
+    case ESP_ZB_NWK_COMMAND_STATUS_ADDRESS_CONFLICT:
+        return "ADDRESS_CONFLICT";
+    case ESP_ZB_NWK_COMMAND_STATUS_VERIFY_ADDRESS:
+        return "VERIFY_ADDRESS";
+    case ESP_ZB_NWK_COMMAND_STATUS_PAN_IDENTIFIER_UPDATE:
+        return "PAN_IDENTIFIER_UPDATE";
+    case ESP_ZB_NWK_COMMAND_STATUS_NETWORK_ADDRESS_UPDATE:
+        return "NETWORK_ADDRESS_UPDATE";
+    case ESP_ZB_NWK_COMMAND_STATUS_BAD_FRAME_COUNTER:
+        return "BAD_FRAME_COUNTER";
+    case ESP_ZB_NWK_COMMAND_STATUS_BAD_KEY_SEQUENCE_NUMBER:
+        return "BAD_KEY_SEQUENCE_NUMBER";
+    case ESP_ZB_NWK_COMMAND_STATUS_UNKNOWN_COMMAND:
+        return "UNKNOWN_COMMAND";
+    default:
+        return "UNKNOWN";
+    }
+}
+
 typedef struct {
     uint16_t dst_addr;
     uint8_t start_index;
@@ -249,6 +301,14 @@ static void sensor_fake_update_and_report_cb(uint8_t param)
 
 static void zb_buttons_handler(switch_func_pair_t *button_func_pair)
 {
+    if (button_func_pair->func == SWITCH_FACTORY_RESET_CONTROL) {
+        if (!s_factory_reset_requested) {
+            s_factory_reset_requested = true;
+            ESP_LOGW(TAG, "Button long-press: factory reset requested (erase zb_storage and restart)");
+            esp_zb_factory_reset();
+        }
+        return;
+    }
     if (button_func_pair->func == SWITCH_ONOFF_TOGGLE_CONTROL) {
         /* implemented light switch toggle functionality */
         esp_zb_zcl_on_off_cmd_t cmd_req;
@@ -332,8 +392,10 @@ void esp_zb_app_signal_handler(esp_zb_app_signal_t *signal_struct)
                 esp_zb_scheduler_alarm((esp_zb_callback_t)sensor_fake_update_and_report_cb, 0, 3 * 1000);
             }
         } else {
-            ESP_LOGW(TAG, "Network steering failed (status: %s), retry in 1s", esp_err_to_name(err_status));
-            esp_zb_scheduler_alarm((esp_zb_callback_t)bdb_start_top_level_commissioning_cb, ESP_ZB_BDB_MODE_NETWORK_STEERING, 1000);
+            ESP_LOGW(TAG, "Network steering failed (status: %s), retry in %ds", esp_err_to_name(err_status),
+                     ESP_ZB_STEERING_RETRY_DELAY_S);
+            esp_zb_scheduler_alarm((esp_zb_callback_t)bdb_start_top_level_commissioning_cb,
+                                   ESP_ZB_BDB_MODE_NETWORK_STEERING, ESP_ZB_STEERING_RETRY_DELAY_MS);
         }
         break;
     case ESP_ZB_NWK_SIGNAL_PERMIT_JOIN_STATUS:
@@ -345,6 +407,29 @@ void esp_zb_app_signal_handler(esp_zb_app_signal_t *signal_struct)
             }
         }
         break;
+    case ESP_ZB_ZDO_DEVICE_UNAVAILABLE: {
+        const esp_zb_zdo_device_unavailable_params_t *p =
+            (const esp_zb_zdo_device_unavailable_params_t *)esp_zb_app_signal_get_params(p_sg_p);
+        if (p) {
+            char ieee_str[24] = {0};
+            zb_format_ieee_addr(ieee_str, sizeof(ieee_str), p->long_addr);
+            ESP_LOGW(TAG, "ZDO device unavailable: short=0x%04hx ieee=%s", p->short_addr, ieee_str);
+        } else {
+            ESP_LOGW(TAG, "ZDO device unavailable: (no params)");
+        }
+        break;
+    }
+    case ESP_ZB_NLME_STATUS_INDICATION: {
+        const esp_zb_zdo_signal_nwk_status_indication_params_t *p =
+            (const esp_zb_zdo_signal_nwk_status_indication_params_t *)esp_zb_app_signal_get_params(p_sg_p);
+        if (p) {
+            ESP_LOGW(TAG, "NLME status: nwk_status=0x%02x (%s) addr=0x%04hx unknown_cmd=0x%02x",
+                     p->status, zb_nwk_cmd_status_to_string(p->status), p->network_addr, p->unknown_command_id);
+        } else {
+            ESP_LOGW(TAG, "NLME status: (no params)");
+        }
+        break;
+    }
     default:
         ESP_LOGI(TAG, "ZDO signal: %s (0x%x), status: %s", esp_zb_zdo_signal_to_string(sig_type), sig_type,
                  esp_err_to_name(err_status));

@@ -42,7 +42,7 @@
 extern "C" {
 #endif
 
-/* user should configure which I/O port as toggle switch input, default is GPIO9 */
+/* Toggle switch input GPIO (BOOT button on many ESP32-H2 boards is GPIO9) */
 #define GPIO_INPUT_IO_TOGGLE_SWITCH  GPIO_NUM_9
 
 /* config button level depends on the pull up/down setting
